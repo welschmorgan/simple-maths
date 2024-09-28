@@ -1,11 +1,13 @@
-use crate::{FromPrimitive, Sqrt, ToPrimitive, Unit, Zero};
+use crate::{FromPrimitive, Radian, Sqrt, ToPrimitive, Unit, Zero};
 use paste::paste;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{
   Add, AddAssign, Deref, DerefMut, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Range,
-  Sub, SubAssign,
+  Rem, Sub, SubAssign,
 };
+
+use super::macros::{add_component, impl_aliases, impl_op, impl_unit};
 
 pub struct Vector<T, const N: usize>([T; N]);
 
@@ -143,7 +145,6 @@ impl<
     *onto * scalar
   }
 
-  // Reflect method
   pub fn reflect(&self, normal: &Self) -> Self {
     let dot_product = self.dot(normal);
     let mut ret = Self::default();
@@ -153,7 +154,6 @@ impl<
     ret
   }
 
-  // Distance method
   pub fn distance(&self, other: &Self) -> T {
     let diff = *self - *other;
     let mut ret = T::zero();
@@ -169,9 +169,12 @@ impl<
       + FromPrimitive
       + ToPrimitive
       + Default
+      + Display
       + AddAssign<T>
       + Add<T, Output = T>
       + Copy
+      + Neg<Output = T>
+      + Rem<T, Output = T>
       + Sub<T, Output = T>
       + Unit
       + Mul<T, Output = T>
@@ -181,14 +184,32 @@ impl<
       + PartialOrd,
   > Vector<T, 2>
 {
-  pub fn rotate(&self, angle: T) -> Self {
-    let cos_theta = T::from_primitive(angle.to_primitive().cos());
-    let sin_theta = T::from_primitive(angle.to_primitive().sin());
+  pub fn rotate(&mut self, angle: Radian<T>) -> &mut Self {
+    let cos_theta = angle.to_primitive().cos();
+    let sin_theta = angle.to_primitive().sin();
 
-    Self([
-      self.0[0] * cos_theta - self.0[1] * sin_theta,
-      self.0[0] * sin_theta + self.0[1] * cos_theta,
-    ])
+    println!("Rotate {} by {}", self, angle.to_degrees());
+    println!(
+      "  {} * {} - {} * {}",
+      self.0[0], cos_theta, self.0[1], sin_theta
+    );
+    println!(
+      "  {} * {} + {} * {}",
+      self.0[0], sin_theta, self.0[1], cos_theta
+    );
+    self.0[0] = T::from_primitive(
+      self.0[0].to_primitive() * cos_theta - self.0[1].to_primitive() * sin_theta,
+    );
+    self.0[1] = T::from_primitive(
+      self.0[0].to_primitive() * sin_theta + self.0[1].to_primitive() * cos_theta,
+    );
+    self
+  }
+
+  pub fn rotated(&self, angle: Radian<T>) -> Self {
+    let mut ret = self.clone();
+    ret.rotate(angle);
+    ret
   }
 }
 
@@ -209,13 +230,21 @@ impl<
       + PartialOrd,
   > Vector<T, 3>
 {
-  pub fn rotate(&self, axis: Self, angle: T) -> Self {
+  pub fn rotate(&mut self, axis: Self, angle: Radian<T>) -> &mut Self {
     let axis = axis.normalized();
     let cos_theta = T::from_primitive(angle.to_primitive().cos());
     let sin_theta = T::from_primitive(angle.to_primitive().sin());
-    (*self * cos_theta)
+    self.0 = ((*self * cos_theta)
       + axis.cross(self) * sin_theta
-      + axis * (axis.dot(self) * (T::unit() - cos_theta))
+      + axis * (axis.dot(self) * (T::unit() - cos_theta)))
+      .0;
+    self
+  }
+
+  pub fn rotated(&self, axis: Self, angle: Radian<T>) -> Self {
+    let mut ret = self.clone();
+    ret.rotate(axis, angle);
+    ret
   }
 }
 
@@ -236,14 +265,21 @@ impl<
       + PartialOrd,
   > Vector<T, 4>
 {
-  pub fn rotate(&self, axis: Self, angle: T) -> Self {
+  pub fn rotate(&mut self, axis: Self, angle: Radian<T>) -> &mut Self {
     let axis = axis.normalized();
     let cos_theta = T::from_primitive(angle.to_primitive().cos());
     let sin_theta = T::from_primitive(angle.to_primitive().sin());
-    let mut ret = (*self * cos_theta)
+    self.0 = ((*self * cos_theta)
       + axis.cross(self) * sin_theta
-      + axis * (axis.dot(self) * (T::unit() - cos_theta));
-    ret.0[3] = T::unit();
+      + axis * (axis.dot(self) * (T::unit() - cos_theta)))
+      .0;
+    self.0[3] = T::unit();
+    self
+  }
+
+  pub fn rotated(&self, axis: Self, angle: Radian<T>) -> Self {
+    let mut ret = self.clone();
+    ret.rotate(axis, angle);
     ret
   }
 }
@@ -483,118 +519,6 @@ impl<T: Display, const N: usize> Display for Vector<T, N> {
   }
 }
 
-macro_rules! impl_unit {
-  ($(($ty: ty, $ident: ident)),+) => {
-    $(
-      impl <T: Default + Copy + Unit + Neg<Output = T>> $ty {
-        paste! {
-          pub fn [<unit_ $ident>]() -> Self {
-            let mut v = Self::default();
-            v.[<set_ $ident>](T::unit());
-            v
-          }
-
-          pub fn [<neg_unit_ $ident>]() -> Self {
-            let mut v = Self::default();
-            v.[<set_ $ident>](-T::unit());
-            v
-          }
-        }
-      }
-    )+
-  };
-}
-
-macro_rules! impl_alias {
-  ($(($ty:ty, $comps: expr, $suffix:ident)),+) => {
-    $(
-      paste! {
-        pub type [<Vec $comps $suffix>] = Vector<$ty, $comps>;
-      }
-    )+
-  };
-}
-
-macro_rules! impl_aliases {
-  ($(($ty:ty, $suffix:ident)),+) => {
-    $(
-      impl_alias!(
-        ($ty, 1, $suffix),
-        ($ty, 2, $suffix),
-        ($ty, 3, $suffix),
-        ($ty, 4, $suffix)
-      );
-    )+
-  };
-}
-
-macro_rules! add_component {
-  ($( ($ty: ty, $ident: ident, $i: expr) ),+) => {
-    $(
-      impl<T: Copy> $ty {
-        pub fn $ident(&self) -> T {
-          self.0[$i]
-        }
-
-        paste! {
-          pub fn [<$ident _mut>](&mut self) -> &mut T {
-            &mut self.0[$i]
-          }
-
-          pub fn [<set_ $ident>](&mut self, v: T) {
-            self.0[$i] = v;
-          }
-        }
-      }
-    )+
-  };
-}
-
-///////////////////////
-// Vector / Vector ops
-//
-
-macro_rules! impl_op {
-  ($trait:ty, $meth:ident, $op:tt) => {
-    paste! {
-      impl<T: Copy + [<$trait Assign>]<T>, const N: usize> [<$trait Assign>]<Self> for Vector<T, N> {
-        fn [<$meth _assign>](&mut self, rhs: Self) {
-          for i in 0..N {
-            self.0[i] $op rhs.0[i];
-          }
-        }
-      }
-
-      impl<T: Copy + [<$trait Assign>]<T>, const N: usize> $trait<Self> for Vector<T, N> {
-        type Output = Self;
-
-        fn $meth(mut self, rhs: Self) -> Self::Output {
-          self.[<$meth _assign>](rhs);
-          self
-        }
-      }
-
-
-      impl<T: Copy + [<$trait Assign>]<T>, const N: usize> $trait<T> for Vector<T, N> {
-        type Output = Self;
-
-        fn $meth(mut self, rhs: T) -> Self::Output {
-          self.[<$meth _assign>](rhs);
-          self
-        }
-      }
-
-      impl<T: Copy + [<$trait Assign>]<T>, const N: usize> [<$trait Assign>]<T> for Vector<T, N> {
-        fn [<$meth _assign>](&mut self, rhs: T) {
-          for i in 0..N {
-            self.0[i] $op rhs;
-          }
-        }
-      }
-    }
-  };
-}
-
 impl<T: Copy + Neg<Output = T>, const N: usize> Neg for Vector<T, N> {
   type Output = Self;
 
@@ -694,7 +618,7 @@ impl_aliases!(
 
 #[cfg(test)]
 mod tests {
-  use crate::{vec2, vec3, Vec2i8, Vec3d, Vec3i8};
+  use crate::{vec2, vec3, Degree, Vec2i8, Vec3d, Vec3i8};
 
   use super::Vector;
 
@@ -762,5 +686,11 @@ mod tests {
     let a = vec3(3f32, 2f32, 2f32);
     let b = vec3(4f32, 5f32, 2f32);
     assert_eq!(a.cross(&b), vec3(-6f32, 2f32, 7f32))
+  }
+
+  #[test]
+  fn rotate_2d() {
+    let v = vec2(1.0, 0.0).rotated(Degree::from(90.0).into());
+    assert_eq!(v, vec2(0.0, 1.0))
   }
 }
