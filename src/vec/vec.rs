@@ -1,4 +1,4 @@
-use crate::{Sqrt, Unit, Zero};
+use crate::{FromPrimitive, Sqrt, ToPrimitive, Unit, Zero};
 use paste::paste;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -55,6 +55,195 @@ impl<T: Ord + Copy, const N: usize> Vector<T, N> {
     for i in 0..N {
       ret.0[i] = ret.0[i].max(rhs.0[i]);
     }
+    ret
+  }
+}
+
+impl<
+    T: FromPrimitive
+      + ToPrimitive
+      + Default
+      + AddAssign<T>
+      + Add<T, Output = T>
+      + Copy
+      + Sub<T, Output = T>
+      + Unit
+      + Mul<T, Output = T>
+      + Div<T, Output = T>
+      + PartialOrd,
+    const N: usize,
+  > Vector<T, N>
+{
+  pub fn dot(&self, rhs: &Self) -> T {
+    let mut ret = T::zero();
+    for i in 0..N {
+      ret += self.0[i] * rhs.0[i];
+    }
+    ret
+  }
+
+  pub fn angle_between(&self, rhs: &Self) -> T {
+    let dot_product = self.dot(rhs);
+    let magnitudes = self.magnitude() * rhs.magnitude();
+    let cos_theta = dot_product / magnitudes;
+    // Clamp value to the range [-1, 1] to avoid NaN due to floating-point precision issues
+    let cos_theta = cos_theta.to_primitive().clamp(-1.0, 1.0);
+
+    T::from_primitive(cos_theta.acos()) // Returns angle in radians
+  }
+}
+
+impl<const N: usize> Vector<f32, N> {
+  pub fn lerp(&self, rhs: &Self, t: f32) -> Self {
+    let mut ret = self.clone();
+    for i in 0..N {
+      ret.0[i] = (1.0 - t) * self.0[0] + t * rhs.0[0];
+    }
+    return ret;
+  }
+}
+
+impl<const N: usize> Vector<f64, N> {
+  pub fn lerp(&self, rhs: &Self, t: f64) -> Self {
+    let mut ret = self.clone();
+    for i in 0..N {
+      ret.0[i] = (1.0 - t) * self.0[0] + t * rhs.0[0];
+    }
+    if N == 4 {
+      ret.0[3] = 1.0
+    }
+    return ret;
+  }
+}
+
+impl<
+    T: Copy
+      + FromPrimitive
+      + ToPrimitive
+      + Default
+      + AddAssign<T>
+      + Add<T, Output = T>
+      + Copy
+      + Sub<T, Output = T>
+      + SubAssign<T>
+      + Unit
+      + Mul<T, Output = T>
+      + MulAssign<T>
+      + Div<T, Output = T>
+      + DivAssign<T>
+      + PartialOrd,
+    const N: usize,
+  > Vector<T, N>
+{
+  pub fn project(&self, onto: &Self) -> Self {
+    let dot_product = self.dot(onto);
+    let onto_mag = onto.magnitude();
+    let magnitude_squared = onto_mag * onto_mag;
+    let scalar = dot_product / magnitude_squared;
+    *onto * scalar
+  }
+
+  // Reflect method
+  pub fn reflect(&self, normal: &Self) -> Self {
+    let dot_product = self.dot(normal);
+    let mut ret = Self::default();
+    for i in 0..N {
+      ret.0[i] = self.0[i] - T::from_primitive(2.0) * dot_product * normal.0[i]
+    }
+    ret
+  }
+
+  // Distance method
+  pub fn distance(&self, other: &Self) -> T {
+    let diff = *self - *other;
+    let mut ret = T::zero();
+    for i in 0..N {
+      ret += diff.0[i];
+    }
+    ret.sqrt()
+  }
+}
+
+impl<
+    T: Copy
+      + FromPrimitive
+      + ToPrimitive
+      + Default
+      + AddAssign<T>
+      + Add<T, Output = T>
+      + Copy
+      + Sub<T, Output = T>
+      + Unit
+      + Mul<T, Output = T>
+      + MulAssign<T>
+      + Div<T, Output = T>
+      + DivAssign<T>
+      + PartialOrd,
+  > Vector<T, 2>
+{
+  pub fn rotate(&self, angle: T) -> Self {
+    let cos_theta = T::from_primitive(angle.to_primitive().cos());
+    let sin_theta = T::from_primitive(angle.to_primitive().sin());
+
+    Self([
+      self.0[0] * cos_theta - self.0[1] * sin_theta,
+      self.0[0] * sin_theta + self.0[1] * cos_theta,
+    ])
+  }
+}
+
+impl<
+    T: Copy
+      + FromPrimitive
+      + ToPrimitive
+      + Default
+      + AddAssign<T>
+      + Add<T, Output = T>
+      + Copy
+      + Sub<T, Output = T>
+      + Unit
+      + Mul<T, Output = T>
+      + MulAssign<T>
+      + Div<T, Output = T>
+      + DivAssign<T>
+      + PartialOrd,
+  > Vector<T, 3>
+{
+  pub fn rotate(&self, axis: Self, angle: T) -> Self {
+    let axis = axis.normalized();
+    let cos_theta = T::from_primitive(angle.to_primitive().cos());
+    let sin_theta = T::from_primitive(angle.to_primitive().sin());
+    (*self * cos_theta)
+      + axis.cross(self) * sin_theta
+      + axis * (axis.dot(self) * (T::unit() - cos_theta))
+  }
+}
+
+impl<
+    T: Copy
+      + FromPrimitive
+      + ToPrimitive
+      + Default
+      + AddAssign<T>
+      + Add<T, Output = T>
+      + Copy
+      + Sub<T, Output = T>
+      + Unit
+      + Mul<T, Output = T>
+      + MulAssign<T>
+      + Div<T, Output = T>
+      + DivAssign<T>
+      + PartialOrd,
+  > Vector<T, 4>
+{
+  pub fn rotate(&self, axis: Self, angle: T) -> Self {
+    let axis = axis.normalized();
+    let cos_theta = T::from_primitive(angle.to_primitive().cos());
+    let sin_theta = T::from_primitive(angle.to_primitive().sin());
+    let mut ret = (*self * cos_theta)
+      + axis.cross(self) * sin_theta
+      + axis * (axis.dot(self) * (T::unit() - cos_theta));
+    ret.0[3] = T::unit();
     ret
   }
 }
@@ -221,45 +410,33 @@ impl<T: Copy + Zero + Sqrt + Mul<T, Output = T> + AddAssign<T> + DivAssign<T>, c
 }
 
 impl<T: Copy + Add<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T>> Vector<T, 2> {
-  pub fn cross(&self, rhs: Vector<T, 2>) -> T {
+  pub fn cross(&self, rhs: &Self) -> T {
     self.0[0] * rhs.0[1] - self.0[1] * rhs.0[0]
-  }
-
-  pub fn dot(&self, rhs: Vector<T, 2>) -> T {
-    self.0[0] * rhs.0[0] + self.0[1] * rhs.0[1]
   }
 }
 
 impl<T: Copy + Default + Mul<T, Output = T> + Sub<T, Output = T> + Add<T, Output = T>>
   Vector<T, 3>
 {
-  pub fn cross(&self, rhs: Vector<T, 3>) -> Self {
+  pub fn cross(&self, rhs: &Self) -> Self {
     let mut ret = Self::default();
     ret.0[0] = self.0[1] * rhs.0[2] - self.0[2] * rhs.0[1];
     ret.0[1] = self.0[2] * rhs.0[0] - self.0[0] * rhs.0[2];
     ret.0[2] = self.0[0] * rhs.0[1] - self.0[1] * rhs.0[0];
     ret
-  }
-
-  pub fn dot(&self, rhs: Vector<T, 3>) -> T {
-    self.0[0] * rhs.0[0] + self.0[1] * rhs.0[1] + self.0[2] * rhs.0[2]
   }
 }
 
 impl<T: Copy + Default + Unit + Add<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T>>
   Vector<T, 4>
 {
-  pub fn cross(&self, rhs: Vector<T, 4>) -> Self {
+  pub fn cross(&self, rhs: &Self) -> Self {
     let mut ret = Self::default();
     ret.0[0] = self.0[1] * rhs.0[2] - self.0[2] * rhs.0[1];
     ret.0[1] = self.0[2] * rhs.0[0] - self.0[0] * rhs.0[2];
     ret.0[2] = self.0[0] * rhs.0[1] - self.0[1] * rhs.0[0];
     ret.0[3] = T::unit();
     ret
-  }
-
-  pub fn dot(&self, rhs: Vector<T, 4>) -> T {
-    self.0[0] * rhs.0[0] + self.0[1] * rhs.0[1] + self.0[2] * rhs.0[2] + self.0[3] * rhs.0[3]
   }
 }
 
@@ -563,27 +740,27 @@ mod tests {
   fn dot_2d() {
     let a = vec2(3f32, 2f32);
     let b = vec2(4f32, 5f32);
-    assert_eq!(a.dot(b), 22.0)
+    assert_eq!(a.dot(&b), 22.0)
   }
 
   #[test]
   fn dot_3d() {
     let a = vec3(3f32, 2f32, 2f32);
     let b = vec3(4f32, 5f32, 2f32);
-    assert_eq!(a.dot(b), 26.0)
+    assert_eq!(a.dot(&b), 26.0)
   }
 
   #[test]
   fn cross_2d() {
     let a = vec2(3f32, 2f32);
     let b = vec2(4f32, 5f32);
-    assert_eq!(a.cross(b), 7.0)
+    assert_eq!(a.cross(&b), 7.0)
   }
 
   #[test]
   fn cross_3d() {
     let a = vec3(3f32, 2f32, 2f32);
     let b = vec3(4f32, 5f32, 2f32);
-    assert_eq!(a.cross(b), vec3(-6f32, 2f32, 7f32))
+    assert_eq!(a.cross(&b), vec3(-6f32, 2f32, 7f32))
   }
 }
