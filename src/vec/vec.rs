@@ -412,6 +412,10 @@ pub fn vec4<T: Copy>(x: T, y: T, z: T, w: T) -> Vector<T, 4> {
   Vector::from([x, y, z, w])
 }
 
+pub fn vec<T: Copy, const N: usize>(v: [T; N]) -> Vector<T, N> {
+  Vector::<T, N>::new(v)
+}
+
 impl<T: Copy + Zero + Mul<T, Output = T> + AddAssign<T>, const N: usize> Vector<T, N> {
   pub fn sq_magnitude(&self) -> T {
     let mut ret = T::zero();

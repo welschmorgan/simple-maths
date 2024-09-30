@@ -5,3 +5,7 @@ edition = "2021"
 
 [dependencies]
 paste = "1.0.15"
+
+[features]
+default = ["double-precision"]
+double-precision = []
